@@ -47,30 +47,55 @@ def fictitious_play_symmetric(
 def build_cce_constraints(
     U_res: np.ndarray,
     mu: cp.Variable,
+    U2: Optional[np.ndarray] = None,
 ) -> List:
-    """Construct CCE feasibility constraints for a symmetric restricted game."""
+    """
+    Construct CCE feasibility constraints for a game.
+    Costraint: E[u_i(mu)] >= E[u_i(dev_k, mu_{-i})] for all deviations k.
+    This scales as O(n_actions) constraints, unlike CE which is O(n^2).
+    """
     n1, n2 = U_res.shape
     constraints = [cp.sum(mu) == 1, mu >= 0]
+    
+    # Payoffs
     U1 = U_res
-    U2 = U_res # For symmetric games, P2(i, j) = P1(j, i) = U_res[j, i]. So rows of U2 (P2 actions) are rows of U_res.
-
-    # Player 1 constraints
-    for i in range(n1):
-        for k in range(n1):
-            if i == k:
-                continue
-            gain_vec = U1[i, :] - U1[k, :]
-            constraints.append(cp.sum(cp.multiply(mu[i, :], gain_vec)) >= 0)
-
-    # Player 2 constraints
-    # u2(i, j) = U_res[j, i] for symmetric games, so use rows of U2 (which is U_res.T)
-    for j in range(n2):
-        for k in range(n2):
-            if j == k:
-                continue
-            gain_vec = U2[j, :] - U2[k, :]
-            constraints.append(cp.sum(cp.multiply(mu[:, j], gain_vec)) >= 0)
-
+    if U2 is None:
+        # Assume symmetric if not provided
+        U2 = U_res.T
+    
+    # --- Player 1 CCE Constraints ---
+    # Expected utility from equilibrium distribution
+    # E[u1] = sum_{i,j} mu_{ij} U1_{ij}
+    exp_u1 = cp.sum(cp.multiply(mu, U1))
+    
+    # Marginal distribution of Player 2: prob that P2 plays j is sum_i mu_{ij}
+    # q[j] = sum_i mu_{ij}
+    q = cp.sum(mu, axis=0) # shape (n2,)
+    
+    # Deviation payoffs for P1: if P1 switches to action k, payoff is sum_j q[j] * U1[k, j]
+    # Vectorized: U1 @ q -> shape (n1,)
+    dev_payoffs_p1 = U1 @ q
+    
+    # Constraint: Expected utility >= Deviation utility for all k
+    constraints.append(exp_u1 >= dev_payoffs_p1)
+    
+    # --- Player 2 CCE Constraints ---
+    # Expected utility from equilibrium distribution
+    # E[u2] = sum_{i,j} mu_{ij} U2_{ij}
+    exp_u2 = cp.sum(cp.multiply(mu, U2))
+    
+    # Marginal distribution of Player 1: prob that P1 plays i is sum_j mu_{ij}
+    # p[i] = sum_j mu_{ij}
+    p = cp.sum(mu, axis=1) # shape (n1,)
+    
+    # Deviation payoffs for P2: if P2 switches to action l, payoff is sum_i p[i] * U2[i, l]
+    # Note: U2 is (n1, n2). p is (n1,). We want result (n2,)
+    # p @ U2 -> shape (n2,)
+    dev_payoffs_p2 = p @ U2
+    
+    # Constraint: Expected utility >= Deviation utility for all l
+    constraints.append(exp_u2 >= dev_payoffs_p2)
+    
     return constraints
 
 
@@ -82,8 +107,11 @@ def solve_cce_joint(
     """Solve for CCE joint distribution under different objectives. Returns mu."""
     n1, n2 = U_res.shape
     mu = cp.Variable((n1, n2), nonneg=True)
-    constraints = build_cce_constraints(U_res, mu)
-
+    
+    # Symmetric game assumption in this file essentially
+    U2 = U_res.T
+    constraints = build_cce_constraints(U_res, mu, U2=U2)
+    
     if objective_type == "random":
         if rng is None:
             rng = np.random.default_rng()
@@ -92,9 +120,7 @@ def solve_cce_joint(
     elif objective_type == "entropy":
         obj = cp.Maximize(cp.sum(cp.entr(mu)))
     elif objective_type == "welfare":
-        if n1 != n2:
-            raise ValueError("Welfare objective requires a square payoff matrix.")
-        W = U_res + U_res.T
+        W = U_res + U2
         obj = cp.Maximize(cp.sum(cp.multiply(mu, W)))
     elif objective_type == "gini":
         # Minimize sum(mu^2), equivalent to Maximize (1 - sum(mu^2)) aka Gini impurity
@@ -103,13 +129,20 @@ def solve_cce_joint(
         raise ValueError(f"Unknown objective type: {objective_type}")
 
     prob = cp.Problem(obj, constraints)
-    try:
-        prob.solve(solver=cp.ECOS)
-    except Exception:
+    
+    # Try solvers in order of preference for speed/reliability
+    # CLARABEL/SCS/ECOS are common. HiGHS if installed.
+    solvers = []
+    if hasattr(cp, 'CLARABEL'): solvers.append(cp.CLARABEL)
+    solvers.extend([cp.ECOS, cp.SCS])
+    
+    for solver in solvers:
         try:
-            prob.solve(solver=cp.SCS)
+            prob.solve(solver=solver)
+            if prob.status in ["optimal", "optimal_inaccurate"] and mu.value is not None:
+                break
         except Exception:
-            pass
+            continue
 
     if prob.status not in ["optimal", "optimal_inaccurate"] or mu.value is None:
         # Fallback to uniform independent (product) distribution
@@ -118,13 +151,11 @@ def solve_cce_joint(
         return np.outer(p, q)
 
     mu_val = mu.value
-    # Ensure it's a valid distribution (sometimes solvers leave slightly neg numbers or unnormalized)
     mu_val = np.maximum(mu_val, 0.0)
     total = mu_val.sum()
     if total > 1e-12:
         mu_val /= total
     else:
-        # Fallback if somehow zero
         p = np.ones(n1) / n1
         q = np.ones(n2) / n2
         return np.outer(p, q)
@@ -140,48 +171,69 @@ def solve_max_welfare_cce(U_res: np.ndarray) -> Tuple[float, np.ndarray]:
     n1, n2 = U_res.shape
     mu = cp.Variable((n1, n2), nonneg=True)
     
-    # Payoff matrices
-    U1 = U_res
-    U2 = U_res # For symmetric games, P2(i, j) = U_res[j, i]. So rows of U2 are rows of U_res.
-    
-    constraints = [cp.sum(mu) == 1]
-    
-    # CCE constraints for Player 1:
-    # sum_j mu[i,j] * (u1(i,j) - u1(k,j)) >= 0 for all i, k
-    for i in range(n1):
-        for k in range(n1):
-            if i == k: continue
-            # Expectation of gain from staying at i vs switching to k, given recommendation i
-            # Sum over j: mu[i, j] * (U1[i, j] - U1[k, j])
-            gain_vec = U1[i, :] - U1[k, :]
-            constraints.append(cp.sum(cp.multiply(mu[i, :], gain_vec)) >= 0)
-            
-    # CCE constraints for Player 2:
-    # sum_i mu[i,j] * (u2(i,j) - u2(i,k)) >= 0 for all j, k
-    # u2(i, j) = U2[j, i], so use rows of U2 for player-2 deviations
-    for j in range(n2):
-        for k in range(n2):
-            if j == k: continue
-            gain_vec = U2[j, :] - U2[k, :]
-            constraints.append(cp.sum(cp.multiply(mu[:, j], gain_vec)) >= 0)
+    # Symmetric game assumption
+    U2 = U_res.T
+    constraints = build_cce_constraints(U_res, mu, U2=U2)
             
     # Objective: Maximize Welfare (sum of utilities)
     # Welfare = sum_ij mu[i,j] * (U1[i,j] + U2[i,j])
-    # U2 is stored as U_res.T (shape n2 x n1), so use U2.T to align shapes.
-    W = U1 + U2.T
+    W = U_res + U2
     obj = cp.Maximize(cp.sum(cp.multiply(mu, W)))
     
     prob = cp.Problem(obj, constraints)
-    try:
-        prob.solve(solver=cp.ECOS) 
-    except:
+    
+    solvers = []
+    if hasattr(cp, 'CLARABEL'): solvers.append(cp.CLARABEL)
+    solvers.extend([cp.ECOS, cp.SCS])
+    
+    for solver in solvers:
         try:
-            prob.solve(solver=cp.SCS)
-        except:
-            pass # Fallback
+            prob.solve(solver=solver)
+            if prob.status in ["optimal", "optimal_inaccurate"]:
+                break
+        except Exception:
+            continue
         
-    if prob.status not in ["optimal", "optimal_inaccurate"]:
-        # If solver fails, return default
+    if prob.status not in ["optimal", "optimal_inaccurate"] or mu.value is None:
         return 0.0, np.zeros((n1, n2))
 
-    return prob.value, mu.value
+    mu_val = mu.value
+    # sanitize
+    mu_val = np.maximum(mu_val, 0.0)
+    total = mu_val.sum()
+    if total > 1e-12:
+        mu_val /= total
+    
+    # Recalculate welfare with sanitized mu
+    welfare = np.sum(mu_val * W)
+    return welfare, mu_val
+
+
+if __name__ == "__main__":
+    import time
+    from games import sample_correlated_symmetric_game
+
+    rng = np.random.default_rng(42)
+    
+    for n_actions in [10, 25, 50]:
+        print(f"\nBenchmarking solvers on Correlated Symmetric (A + 0.5*C) with {n_actions} actions...")
+        
+        # Generate game: A + 0.5*C
+        game = sample_correlated_symmetric_game(n_actions=n_actions, alpha=0.5, rng=rng)
+        U = game.payoffs_p1
+
+        solvers_to_test = [
+            ("Fictitious Play", lambda: fictitious_play_symmetric(U, n_steps=500, rng=rng)),
+            ("CCE (Random)", lambda: solve_cce_joint(U, "random", rng=rng)),
+            ("CCE (Entropy)", lambda: solve_cce_joint(U, "entropy", rng=rng)),
+            ("CCE (Welfare)", lambda: solve_cce_joint(U, "welfare", rng=rng)),
+            ("CCE (Gini)", lambda: solve_cce_joint(U, "gini", rng=rng)),
+            ("Max Welfare CCE", lambda: solve_max_welfare_cce(U)),
+        ]
+
+        for name, solver_fn in solvers_to_test:
+            start = time.time()
+            _ = solver_fn()
+            elapsed = time.time() - start
+            print(f"  {name}: {elapsed:.4f}s")
+
