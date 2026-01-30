@@ -13,7 +13,6 @@ sheriff_welfare.png
 *.png
 *.jpg
 *.jpeg
-*.pdf
 *.lock
 !uv.lock
 
