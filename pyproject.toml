@@ -1,0 +1,14 @@
+[project]
+name = "ala"
+version = "0.1.0"
+description = "Small scripts for PSRO sweeps and Candogan decomposition."
+requires-python = ">=3.9"
+dependencies = [
+    "matplotlib",
+    "numpy",
+    "tqdm",
+    "cvxpy",
+]
+
+[tool.uv]
+dev-dependencies = []

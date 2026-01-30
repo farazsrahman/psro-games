@@ -1,0 +1,379 @@
+Multi-Agent Training beyond Zero-Sum with Correlated Equilibrium Meta-Solvers
+
+where the constant vector of ones with appropriate size is
+denoted by e, and ϵ is a vector populated with the approximation parameter. We can also formulate a simplified dual
+version of the optimization as:
+1
+1
+Lα,β = − αT ACAT α + bT AT α − ϵT α − β T Cβ
+2
+2
+1
+− bT β + αT ACβ + bT b,
+(6)
+2
+1
+where C = I − ebT normalizes by the mean, and b = |A|
+e
+∗
+is the uniform vector. The optimal primal solution σ can be
+recovered from the optimal dual variables αp∗ and βp∗ using
+
+σ ∗ = b − CAT α∗ + Cβ ∗ .
+
+(7)
+
+The full-support assumption states that all joint probabilities
+have some positive mass, σ > 0. In this scenario, the dual
+variable vector corresponding to the non-negative probability constraint is zero, β = 0. Therefore we can define
+simplified primal and dual objectives.
+1 T
+σ σ + αT (Aσ − ϵ) + λ(eT σ − 1)
+(8)
+2
+1
+1
+Lα = − αT ACAT α + bT AT α − ϵT α + bT b (9)
+2
+2
+∗
+T ∗
+σ = b − CA α
+(10)
+
+Lα,λ
+=
+σ
+
+4. Properties of MG(C)CE
+In this section we discuss some of the properties of ϵMG(C)CE6 . Section C contains the proofs for this section.
+4.1. Equilibrium Selection Problem
+There are two levels of coordination; first is selecting an
+equilibrium before play commences, and second is selecting
+actions during play time. Both NEs and (C)CEs require
+agreement on what equilibrium is being played (Goldberg
+et al., 2013; Avis et al., 2010; Harsanyi & Selten, 1988): for
+(C)CEs this is a joint action probability distribution, and for
+NEs this is also a joint action probability distribution that
+can conveniently be factored into stochastic strategies for
+each player. Therefore, at this level of coordination, both
+NEs and (C)CEs are similar. We refer to this coordination
+problem as the equilibrium selection problem (Harsanyi &
+Selten, 1988). At action selection time only (C)CEs require
+further coordination. NEs are factorizable and therefore can
+sample independently without further coordination. (C)CEs
+rely on a central correlation device that will recommend
+actions from the equilibrium that was previously agreed
+upon.
+6
+
+Some of the properties discussed here also apply to MECE
+(Ortiz et al., 2007).
+
+This means that neither NEs nor (C)CEs can be directly
+used prescriptively in n-player, general-sum games. These
+solution concepts specify what subsets of joint strategies
+are in equilibrium, but does not specify how decentralized
+agents should select amongst these. Furthermore, the presence of a correlation device does not make (C)CEs prescriptive because the agents still need a mechanism to agree on
+the distribution the correlation device samples from7 . This
+coordination problem can be cast as one that is more computational in nature: what rules allow an equilibrium to be
+uniquely (and perhaps de-centrally) selected?
+This highlights the main drawback of MW(C)CE which does
+not select for unique solutions (for example, in constant-sum
+games all solutions have maximum welfare). One selection
+criterion for NEs is maximum entropy Nash equilibrium
+(MENE) (Balduzzi et al., 2018), however outside of the
+two-player constant-sum setting, these are generally not
+easy to compute (Daskalakis et al., 2009). CEs exist in a
+convex polytope, so any convex function can select among
+them. Maximum entropy correlated equilibrium (MECE)
+(Ortiz et al., 2007) is limited to full-support solutions, which
+may not exist when ϵ = 0, and can be hard to solve in
+practice. Therefore, there is a gap in the literature for a
+computationally tractable, unique, solution concept and this
+work proposes MG(C)CE fills this gap.
+Theorem 1 (Uniqueness and Existence). MG(C)CE provides a unique solution to the equilibrium solution problem
+and always exists.
+4.2. Scalable Representation
+MG(C)CE can provide solutions in general-support and,
+similar to MECE, MG(C)CE permits a scalable representation when the solution is full-support. Under this scenario,
+the distribution inequality constraint variables, β, are inactive, are equal to zero, can be dropped, and the α variables
+can fully parameterize the solution.
+Theorem 2 (Scalable Representation). The MG(C)CE, σ ∗ ,
+has the following forms:
+General Support: σ ∗ = b − CAT α∗ + Cβ ∗
+∗
+
+T
+
+Full Support: σ = b − CA α
+
+∗
+
+(11)
+(12)
+
+Where e is a vector of ones, |A| = p |Ap |, C = I − eT b,
+1
+and b = |A|
+e are constants. α∗ ≥ 0 and β ∗ ≥ 0 are the
+optimal dual variables of the solution, corresponding to the
+(C)CE and distribution inequality constraints respectively.
+Q
+
+Let |Ap | correspond to the number of actions available to
+player p, and the total number of joint actions, σ, is |A| =
+7
+
+This is true if the correlation device is not considered as part
+of the game. If it was part of the game (for example traffic lights
+at a junction) the solution concept can appear prescriptive.
+
+Multi-Agent Training beyond Zero-Sum with Correlated Equilibrium Meta-Solvers
+
+Q
+
+p |Ap |. For each value of σ, there is a corresponding β
+dual variable. The number of α dual variables
+is no more
+P
+than the number ofPpair permutations p |Ap |(|Ap | − 1)
+for CEs or actions p |Ap | for CCEs. Clearly,
+P games with
+three or
+more
+players
+and
+many
+actions,
+P
+Q p |Ap |(|Ap | −
+Q
+1) ≪ p |Ap | for CEs and p |Ap | ≪ p |Ap | for CCEs,
+allow for a very scalable parameterization if the full-support
+assumption holds. Furthermore, optimal α∗ are sparse so
+we can discard rows from A, in a similar spirit to SVMs
+(Cortes & Vapnik, 1995).
+
+when full-support, working out the minimum ϵ such that
+a full-support solution exists, full-ϵ-MG(C)CE, would be
+useful. Finally, the solution with the smallest feasible ϵ is
+the min ϵ-MG(C)CE. This solution has the lowest entropy
+of the family, but the highest payoff, and constitutes the
+strictest equilibrium. Refer to Figure 1 for the family of
+solutions for the traffic lights game.
+Theorem 4. For non-trivial games (Nau et al., 2004), the
+MG(C)CE lies on the boundary of the polytope and hence is
+a weak equilibrium.
+
+For CEs, full-support is not possible when an action is
+strictly dominated by another. This case can be easily mitigated by iterated elimination of strictly dominated strategies
+(IESDS) (Fudenberg & Tirole, 1991). This also has the
+desirable property of simplifying the optimization. In a
+similar argument, when actions are repeated (having the
+same payoffs), only one need be retained with appropriate
+modifications to the optimization.
+
+Since the ϵ is deterministically known for the max(Ab)ϵMG(C)CE, 12 max(Ab)ϵ-MG(C)CE and MG(C)CE solutions, we can solve for these using the standard solvers
+discussed in Section 3. For the min ϵ-MG(C)CE we can
+tweak our optimization procedure to solve for this case directly by simply including a cϵ term to minimize, where
+c > 1. We use bisection search to find full-ϵ-MG(C)CE.
+
+Among the set of ϵ-MG(C)CE there always exists one with
+full-support. Note that any infinitesimal positive ϵ will permit a full-support (C)CE, but ϵ-MG(C)CE does not necessarily select these. An upper bound on ϵ which permits a
+full-support solution is given by Theorem 3.
+Theorem 3 (Existence of Full-Support ϵ-MG(C)CE). For
+all games, there exists an ϵ ≤ max(Ab) such that a fullsupport, ϵ-MG(C)CE exists. A uniform solution, b, always
+exists when max(Ab) ≤ ϵ. When ϵ < max(Ab), the solution is non-uniform.
+
+4.4. Invariance
+
+4.3. Family of Solutions
+ϵ-MG(C)CE provides an intuitive way to control the strictness of the equilibrium via the approximation parameter, ϵ,
+which parameterizes a family of unique solutions. Positive ϵ
+expands the solution set and results in a higher Gini impurity
+solution, at the expense of lower payoff, and approximate
+equilibrium. Negative ϵ shrinks the solution set to achieve a
+strict equilibrium and higher payoff at the expense of Gini
+impurity. This might also be a more robust solution (Wald,
+1939; 1945; Ben-Tal et al., 2009) if the payoff is uncertain.
+It is worth emphasizing a set of particularly interesting solutions within this family. Firstly the standard MG(C)CE,
+with ϵ = 0, provides a weak equilibrium for non-trivial
+games (Theorem 4). Secondly, an edge case with positive ϵ is max(Ab)-ϵ-MG(C)CE which guarantees a uniform distribution solution. Converging to uniform when
+increasing ϵ is a desirable property (principle of insufficient reason) (Leonard J. Savage, 1954; Sinn, 1980; Jaynes,
+1957). Thirdly, note that all ϵ < max(Ab) are guaranteed to have a non-uniform distribution (Theorem 3), therefore, a 12 max(Ab)-ϵ-MG(C)CE could be an interesting
+way to regularise a MGCE towards a uniform distribution.
+Fourthly, because our algorithms are particularly scalable
+
+An important concept in decision theory, called cardinal
+utility (Mas-Colell et al., 1995), is that offset and positive
+scale of each player’s payoff does not change the properties
+of the game. A notable solution concept that does not have
+this property is MW(C)CE.
+Theorem 5 (Affine Payoff Transformation Invariance). If
+σ ∗ is the ϵ-MG(C)CE of a game, G, then for each player p
+independently we can transform the payoff tensors G̃p =
+cp Gp + dp and approximation vector ϵ̃p = ap ϵp for some
+positive cp and real dp scalars, without changing the solution. Furthermore rows of the advantage matrix A, and
+approximation vector, ϵ, can be scaled independently without changing the MG(C)CE.
+4.5. Computationally Tractable
+In general, finding NEs is a hard problem (Daskalakis et al.,
+2009). While solving for any valid (C)CE is simple (basic
+feasible solution of a linear constraint problem) (Matouek &
+Gärtner, 2006), and finding a (C)CE with a linear objective
+is an LP, solving for a particular (C)CE can be hard. For
+example, MECE (Ortiz et al., 2007) requires optimizing a
+constrained nonlinear objective. α-Rank can be solved in
+cubic time in the number of pure joint strategies, O(|A|3 ).
+MG(C)CE, however, is the solution to a quadratic program,
+and therefore can be solved in polynomial time. Furthermore, if the assumption is made that the solution is fullsupport, the algorithm’s variables scale better than the number of σ parameters.
+Space requirements are dominated by the storage of the
+advantage matrix A, which requires a space of O(n|Ap ||A|)
+when exploiting sparsity. Computation is also on the order
+O(n|Ap ||A|) for gradient computation, exploiting sparsity.
+
+Multi-Agent Training beyond Zero-Sum with Correlated Equilibrium Meta-Solvers
+
+The number of variables depends on whether we are solving
+the general-support, |A| + n|Ap |2 , or full-support, n|Ap |2
+version. It is possible to make use of sparse matrix implementations and only efficient matrix-vector multiplications
+are required to compute the derivatives.
+
+JPSRO(CE)
+There is a BR for each possible recommendation a
+t+1
+t+1
+player can get, Πt+1
+= Π0:t
+=
+p
+p ∪ Πp , where Πp
+t+1 i
+{(BRp (πp ))i=1..|Π0:t
+}.
+p |
+BRt+1
+p (πp ) ∈ argmax
+πp∗ ∈Π∗
+p
+
+5. Joint PSRO
+JPSRO (Algorithm 2) is a novel extension to Policy-Space
+Response Oracles (PSRO) (Lanctot et al., 2017) (Algorithm 1) with full mixed joint policies to enable coordination
+among policies. Although a conceptually straightforward
+extension, careful attention is needed to a) develop suitable
+best response (BR) operators, b) develop tractable joint distribution meta-solvers (MS), c) evaluate the set of policies
+found so far, and d) develop convergence proofs.
+Using notation of Section 2.1, but policies instead of actions.
+Let (Π∗p )p=1..n be the set of all policies of the extensive
+form game available for each player, and Π∗ = ⊗p Π∗p be
+the set of all joint policies. JPSRO is an iteration-based
+algorithm, let {c πpt , ...} = Πtp be the set of new policies
+found at iteration t for player p with c ∈ C indexing an
+individual policy within that set. The set of all policies
+found so far for player p is denoted Π0:t
+p and the set of joint
+policies is denoted Π0:t = ⊗p Π0:t
+.
+The expected return
+p
+(ER), an NF game (G0:t
+)
+,
+is
+tracked
+for each joint
+p=1..n
+p
+policy found so far such that G0:t
+(π)
+is
+the
+expected
+return
+p
+to player p when playing joint policy π. We also define G∗p
+to be the payoff over all possible joint policies.
+The MS is a function taking in the ER and returning a joint
+distribution, σ t , over Π0:t , such that σ t (π) is the probability
+to play joint policy π ∈ Π0:t at iteration t. The BR operator
+finds a policy which maximizes the expected return over of
+opponent mixed joint policies, π−p ∈ Π0:t
+−p . This mixture is
+defined in terms of the MS joint distribution, σ t .
+5.1. Best Response Operators
+At iteration t + 1 each set, Π0:t
+p , can be expanded using
+either using a CCE or CE best response (BR) operator. The
+type of BR operator used determines the type of equilibrium
+that JPSRO converges to (Section 5.4).
+JPSRO(CCE)
+There is a single BR objective for each player, which expands the player policy set, Π0:t+1
+= Π0:t ∪ Πt+1
+p
+p , where
+P p
+t+1
+t+1
+Πp = {BRp }, and σ(π−p ) = πp ∈Π0:t
+σ(π
+p , π−p ).
+p
+BRt+1
+∈ argmax
+p
+πp∗ ∈Π∗
+p
+
+X
+
+σ t (π−p )G∗p (πp∗ , π−p )
+
+π−p ∈Π0:t
+−p
+
+The CCE BR attempts to exploit the joint distribution with
+the responder’s own policy preferences marginalized out.
+
+X
+
+σ t (π−p |πp )G∗p (πp∗ , π−p )
+
+π−p ∈Π0:t
+−p
+
+Therefore the CE BR attempts to exploit each policy conditional “slice”. In practice, we only calculate a BR for
+positive support policies (similar to Rectified Nash (Balduzzi et al., 2019). Computing the argmax of the BRs can
+be achieved through RL or exactly traversing the game tree.
+5.2. Meta-Solvers
+We propose that (C)CEs are good candidates as meta-solvers
+(MSs). They are more tractable than NEs and can enable coordination to maximize payoff between cooperative agents.
+In particular we propose three flavours of equilibrium MSs.
+Firstly, greedy (such as MW(C)CE), which select highest
+payoff equilibria, and attempt to improve further upon them.
+Secondly, maximum entropy (such as MG(C)CE) attempt to
+be robust against many policies through spreading weight.
+Finally, random samplers (such as RV(C)CE) attempt to
+explore by probing the extreme points of equilibria. Note
+that these MSs search through the equilibrium subspace, not
+the full policy space, and this restriction is a powerful way
+of achieving convergence. Note that since CEs ⊆ CCEs,
+one can also use CE MSs with JPSRO(CCE).
+5.3. Evaluation
+Measuring convergence to NE (NE Gap, Lanctot et al.
+(2017)) is suitable in two-player, constant-sum games. However, it is not rich enough in cooperative settings. We propose to measure convergence to (C)CE ((C)CE Gap in Section E.4) in the full extensive form game. A gap, ∆, of zero
+implies convergence to an equilibrium. We also measure
+the expected value obtained by each player, because convergence to an equilibrium does not imply a high value. Both
+gap and value metrics need to be evaluated under a metadistribution. Using the same distribution as the MS may be
+unsuitable because MSs do not necessarily result in equilibria, may be random, or may maximize entropy. Therefore
+we may also want to evaluate under other distributions such
+as MW(C)CE, because it constitutes an equilibrium and
+maximizes value. A final relevant measurement is the number of unique polices found over time. The goal of an MS is
+to expand policy space (by proposing a joint policy to best
+respond to). If it fails to find novel policies at an acceptable
+rate, this could be evidence it is not performing well. Not
+all novel policies are useful, so caution should be exercised
+when interpreting this metric. If using a (C)CE MS and the
+gap is positive, it is guaranteed to find a novel BR policy.
+
+
