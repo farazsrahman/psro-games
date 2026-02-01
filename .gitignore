@@ -6,6 +6,7 @@ __pycache__/
 env/
 venv/
 .env
+debug**
 
 # Project specific outputs
 psro_outputs/
