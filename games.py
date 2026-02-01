@@ -402,41 +402,51 @@ def sample_normal_symmetric_game(
     )
 
 
-def sample_correlated_symmetric_game(
+def sample_competitive_cooperative_interpolation_game(
     n_actions: int,
     alpha: float = 0.5,
     rng: Optional[np.random.Generator] = None,
 ) -> SymmetricGame:
-    """
-    Sample a symmetric 2p game where payoffs are a mix of independent noise
-    and a common symmetric component that boosts welfare.
-    
-    U1 = A + alpha * C
-    where A ~ N(0, 1) and C ~ N(0, 1) but C is symmetric.
-    """
+
     if rng is None:
         rng = np.random.default_rng()
 
-    # Independent component A ~ N(0, 1)
-    A = rng.standard_normal(size=(n_actions, n_actions))
+    A_raw = rng.standard_normal(size=(n_actions, n_actions))
+    A = 0.5 * (A_raw - A_raw.T)
     
-    # Common component C ~ N(0, 1), made symmetric
-    # This represents shared "quality" of outcomes (i, j)
     C_raw = rng.standard_normal(size=(n_actions, n_actions))
     C = 0.5 * (C_raw + C_raw.T)
-    # Or strict symmetrization like before:
-    # U_upper = np.triu(C_raw)
-    # C = U_upper + U_upper.T - np.diag(np.diag(U_upper))
     
-    # Normalize C to have similar variance as A? 
-    # A has var 1. C (avg of 2 indep vars) has var 0.5. 
-    # Let's just use it as is, governed by alpha.
-    
-    U = A + alpha * C
+    U = (1-alpha) * A + alpha * C
     
     return SymmetricGame(
         n_actions=n_actions,
         payoffs=U,
+    )
+
+
+
+def opt_out_rps(a: float) -> SymmetricGame:
+    """
+    Opt-out RPS game. A, B, C are standard RPS strategies. D is the opt-out strategy.
+    
+    Payoff matrix for P1:
+         A   B   C   D
+      A  0   1  -1   0
+      B -1   0   1   0
+      C  1  -1   0   0
+      D  a   a   a  10
+    """
+    M = np.array([
+        [0.0, 1.0, -1.0, 0.0],
+        [-1.0, 0.0, 1.0, 0.0],
+        [1.0, -1.0, 0.0, 0.0],
+        [float(a), float(a), float(a), 10.0]
+    ])
+    
+    return SymmetricGame(
+        n_actions=4,
+        payoffs=M,
     )
 
 
