@@ -32,84 +32,76 @@ def calculate_ne_regret(
 
 
 def calculate_cce_regret(
-    U_full: np.ndarray,
-    mu_res: np.ndarray,
-    pop1: List[int],
-    pop2: List[int],
+    U: np.ndarray,
+    mu: np.ndarray,
+    rows: List[int] = None,
+    cols: List[int] = None,
+    U2: np.ndarray = None,
 ) -> float:
     """
-    Calculate the CCE Regret of the empirical joint distribution mu_res when played in the full game.
-    CCE Regret is the max regret over players who can change their distribution to a fixed strategy 
-    instead of playing the CCE joint action.
+    Calculate the CCE Regret of the joint distribution mu.
+    
+    If rows/cols are provided, mu is treated as a distribution over the restricted game defined by those indices,
+    and regret is calculated against the full game U (Exploitability).
+    
+    If rows/cols are None, mu is treated as a distribution over the game U itself (Internal Regret).
     """
-    if mu_res is None:
+    if mu is None:
         return float('nan')
 
-    # Reconstruct full joint to get marginals? 
-    # Or just work with indices for efficiency.
+    n_rows, n_cols = U.shape
     
-    # Player 1 (Row Player)
-    # Expected payoff under mu_res
-    # P1 Payoff = sum_{i,j} mu[i,j] * U[pop1[i], pop2[j]]
+    # Resolve indices and restricted game dimensions
+    if rows is None:
+        rows = list(range(n_rows))
+    if cols is None:
+        cols = list(range(n_cols))
+        
+    if U2 is None:
+        if U.shape[0] == U.shape[1] and np.allclose(U, U.T): # Symmetric check roughly
+             # If strictly symmetric game logic is desired, usually U2 = U.T
+             U2 = U.T
+        else:
+             U2 = U.T # Default to zero-sum/symmetric assumption if not provided? 
+                      # In the original code, calculate_regret_cce did U2 = U_res.T
+                      # In calculate_cce_regret, P2 payoff was U.T.
+                      # So U2 = U.T seems consistent.
+
+    # --- Player 1 (Row Player) ---
+    # Expected payoff under mu
+    # We need the submatrix of U corresponding to the active strategies in mu
+    U_sub = U[np.ix_(rows, cols)]
+    curr_payoff_1 = np.sum(mu * U_sub)
     
-    # To compute efficiently:
-    # 1. Compute marginals of mu_res
-    # mu_res shape: (len(pop1), len(pop2))
-    marg_q = np.sum(mu_res, axis=0) # Player 2's marginal over pop2
+    # Marginal of P2 over the columns of U
+    # q_full is 0 everywhere except 'cols'
+    # The marginal of mu corresponds to indices in 'cols'
+    marg_q_sub = np.sum(mu, axis=0)
     
-    # 2. Player 1's expected payoff under mu_res
-    # We can use the restricted block
-    U_res = U_full[np.ix_(pop1, pop2)]
-    curr_payoff_1 = np.sum(mu_res * U_res)
-    
-    # 3. Player 1's max deviation payoff: Max_k (U[k, :] @ q_full)
-    # q_full is 0 everywhere except pop2
-    # So we compute U_full[:, pop2] @ marg_q
-    dev_payoffs_1 = U_full[:, pop2] @ marg_q
+    # Deviation payoffs: U @ q_full
+    # We can compute this as U[:, cols] @ marg_q_sub
+    dev_payoffs_1 = U[:, cols] @ marg_q_sub
     max_dev_1 = np.max(dev_payoffs_1)
     
     regret1 = max(0.0, max_dev_1 - curr_payoff_1)
     
-    # Player 2 (Col Player)
-    marg_p = np.sum(mu_res, axis=1) # Player 1's marginal over pop1
+    # --- Player 2 (Col Player) ---
+    # Expected payoff under mu
+    U2_sub = U2[np.ix_(rows, cols)]
+    curr_payoff_2 = np.sum(mu * U2_sub)
     
-    # P2 Payoff (using symmetry U_full.T for P2 payoffs)
-    U_res_p2 = U_full.T[np.ix_(pop2, pop1)] # Note indices order for T: pop2 are rows of T
-    # Wait, U.T has shape (n,n). Row i of U.T corresponds to action i of P2.
-    # mu_res[i,j] is prob P1 plays pop1[i] and P2 plays pop2[j].
-    # Contribution to P2: mu_res[i,j] * U.T[pop2[j], pop1[i]]
-    # This matches U_res_p2[j, i] * mu_res[i, j]
+    # Marginal of P1 over the rows of U
+    marg_p_sub = np.sum(mu, axis=1)
     
-    # Easier: P2 payoff = sum(mu_res * U_p2_res) where U_p2_res[i,j] = U.T[pop2[j], pop1[i]] ?
-    # NO. U_res is U[pop1, pop2]. P2 payoff matrix given P1 (row) and P2 (col) is (U[pop1, pop2]).T?
-    # No, U is P1 payoff. If symmetric, P2 payoff is U^T.
-    # So P2 payoff for (a1, a2) is U[a2, a1].
-    # Current payoff P2: sum_{i,j} mu[i,j] * U[pop2[j], pop1[i]]
-    
-    curr_payoff_2 = 0.0
-    for i_idx, i_act in enumerate(pop1):
-        for j_idx, j_act in enumerate(pop2):
-            # P2 payoff matrix element [i_act, j_act] is U_full.T[i_act, j_act] (if U.T is P2's payoff)
-            # Standard: U is P1 payoff. U[i, j]. 
-            # Symmetric game P2 payoff: u2(i, j) = u1(j, i) = U[j, i] = U.T[i, j].
-            # So calculating sum mu[i,j] * U.T[i, j] is correct.
-            curr_payoff_2 += mu_res[i_idx, j_idx] * U_full.T[i_act, j_act]
-            
-    # Deviation for P2: Max_k (Sum_i p_i u2(i, k))
-    # u2(i, k) = U.T[i, k].
-    # So we need sum_i p_i * U.T[i, k].
-    # This corresponds to vector (p @ U.T) where p is row vector.
-    # Restricting to pop1: marg_p @ U_full.T[pop1, :]
-    # U_full.T[pop1, :] selects rows of U.T corresponding to pop1.
-    dev_payoffs_2 = marg_p @ U_full.T[pop1, :]
+    # Deviation payoffs for P2: p_full @ U2
+    # p_full is 0 everywhere except 'rows'
+    # We can compute this as marg_p_sub @ U2[rows, :]
+    dev_payoffs_2 = marg_p_sub @ U2[rows, :]
     max_dev_2 = np.max(dev_payoffs_2)
     
     regret2 = max(0.0, max_dev_2 - curr_payoff_2)
     
     return max(regret1, regret2)
-
-
-
 
 
 def extract_restricted_game(
@@ -124,3 +116,70 @@ def extract_restricted_game(
 def uniform_welfare(U: np.ndarray) -> float:
     """Compute uniform-strategy welfare for symmetric games."""
     return float(np.mean(U + U.T))
+
+
+def calculate_regret_ce(U_res: np.ndarray, mu: np.ndarray, U2: np.ndarray = None) -> float:
+    """
+    Calculates the maximum regret for a Correlated Equilibrium (CE).
+    
+    We compute the "Swap Regret" or "Internal Regret", defined as the maximum expected gain 
+    if a player could replace every occurrence of action i with optimal action k.
+    
+    Regret = max_i max_k sum_j mu[i,j] * (U[k,j] - U[i,j])
+             (Gain from swapping i -> k)
+             
+    Wait, usually Swap Regret is sum_i max_k (Gain(i->k)).
+    Or max_phi sum_s P(s) (u(phi(s)) - u(s)).
+    
+    Here we return the MAXIMUM Regret over players.
+    For each player, we calculate:
+    Total_Regret = max_{phi: A->A} E[ u(phi(s_i), s_{-i}) - u(s) ]
+                 = sum_i max_k E[ u(k, s_{-i}) 1_{s_i=i} - u(i, s_{-i}) 1_{s_i=i} ]
+                 = sum_i max_k ( sum_j mu[i,j] (U[k,j] - U[i,j]) )
+                 
+    This handles numerical stability naturally (no division by P(i)).
+    """
+    n1, n2 = U_res.shape
+    if U2 is None:
+        U2 = U_res.T
+        
+    # --- Player 1 Regret ---
+    # We want to find max_phi sum_{i,j} mu[i,j] (U[phi(i), j] - U[i,j])
+    # = sum_i max_k sum_j mu[i,j] (U[k,j] - U[i,j])
+    
+    total_regret_p1 = 0.0
+    for i in range(n1):
+        # Current expected utility when playing i: sum_j mu[i,j] U[i,j]
+        current_u_contribution = np.dot(mu[i, :], U_res[i, :])
+        
+        # Best deviation from i: max_k sum_j mu[i,j] U[k,j]
+        # Calculate vector of utilities for all k against P(j|i)*P(i) = mu[i,:]
+        dev_utilities = U_res @ mu[i, :] # shape (n1,)
+        best_dev_u_contribution = np.max(dev_utilities)
+        
+        gain = best_dev_u_contribution - current_u_contribution
+        # Gain should be non-negative because one option for k is i itself.
+        # But numerically could be -epsilon.
+        if gain > 0:
+            total_regret_p1 += gain
+            
+    # --- Player 2 Regret ---
+    # mu[:, j] is dist over P1 when P2 plays j.
+    total_regret_p2 = 0.0
+    for j in range(n2):
+        # Current exp util contribution when playing j
+        current_u_contribution = np.dot(mu[:, j], U2[:, j])
+        
+        # Best dev from j: max_l sum_i mu[i, j] U2[i, l]
+        # U2 is (n1, n2). mu[:,j] is (n1,)
+        # p_vector = mu[:, j]
+        # dev_utils[l] = sum_i p_vector[i] * U2[i, l]
+        # = p_vector @ U2 -> shape (n2,)
+        dev_utilities = mu[:, j] @ U2
+        best_dev_u_contribution = np.max(dev_utilities)
+        
+        gain = best_dev_u_contribution - current_u_contribution
+        if gain > 0:
+            total_regret_p2 += gain
+        
+    return max(total_regret_p1, total_regret_p2)

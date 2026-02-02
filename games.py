@@ -406,6 +406,7 @@ def sample_competitive_cooperative_interpolation_game(
     n_actions: int,
     alpha: float = 0.5,
     rng: Optional[np.random.Generator] = None,
+    rank: Optional[int] = None,
 ) -> SymmetricGame:
 
     if rng is None:
@@ -418,6 +419,15 @@ def sample_competitive_cooperative_interpolation_game(
     C = 0.5 * (C_raw + C_raw.T)
     
     U = (1-alpha) * A + alpha * C
+    
+    if rank is not None:
+        # Enforce rank constraint via SVD truncation
+        # TODO: verify if the properties of the game if the rank is enforced before vs. after the interpolation
+        # U is real, so we use SVD.
+        u, s, vt = np.linalg.svd(U, full_matrices=False)
+        if rank < len(s):
+            s[rank:] = 0.0
+        U = u @ np.diag(s) @ vt
     
     return SymmetricGame(
         n_actions=n_actions,

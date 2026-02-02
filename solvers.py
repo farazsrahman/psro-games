@@ -103,6 +103,7 @@ def solve_cce_joint(
     U_res: np.ndarray,
     objective_type: str,
     rng: Optional[np.random.Generator] = None,
+    objective_matrix: Optional[np.ndarray] = None,
 ) -> np.ndarray:
     """Solve for CCE joint distribution under different objectives. Returns mu."""
     n1, n2 = U_res.shape
@@ -117,6 +118,12 @@ def solve_cce_joint(
             rng = np.random.default_rng()
         R = rng.normal(size=(n1, n2))
         obj = cp.Maximize(cp.sum(cp.multiply(mu, R)))
+    elif objective_type == "linear":
+        if objective_matrix is None:
+            raise ValueError("Must provide objective_matrix for 'linear' objective_type")
+        if objective_matrix.shape != (n1, n2):
+            raise ValueError(f"objective_matrix shape {objective_matrix.shape} must match U_res {(n1, n2)}")
+        obj = cp.Maximize(cp.sum(cp.multiply(mu, objective_matrix)))
     elif objective_type == "entropy":
         obj = cp.Maximize(cp.sum(cp.entr(mu)))
     elif objective_type == "welfare":
@@ -209,17 +216,95 @@ def solve_max_welfare_cce(U_res: np.ndarray) -> Tuple[float, np.ndarray]:
     return welfare, mu_val
 
 
+def solve_max_welfare_ce(U: np.ndarray) -> Tuple[np.ndarray, float]:
+    """
+    Finds a Correlated Equilibrium (CE) that maximizes Total Welfare.
+    Returns: (mu_matrix, max_welfare)
+    """
+    n = U.shape[0]
+    P = cp.Variable((n, n), nonneg=True)
+    
+    # Symmetric assumption for welfare calc U + U.T
+    U2 = U.T
+    
+    # Welfare Objective 
+    # Maximize sum(P * (U + U2))
+    W = U + U2
+    objective = cp.Maximize(cp.sum(cp.multiply(P, W)))
+    
+    constraints = [cp.sum(P) == 1]
+
+    # CE constraints: 
+    # For every recommended action 'i', player 1 should not prefer 'k'.
+    # sum_j P[i,j] * U[i,j] >= sum_j P[i,j] * U[k,j]  for all i, k
+    # 
+    # And symmetrically for player 2.
+    
+    # Vectorized constraints
+    # For P1:
+    # E[u | rec=i] * P(rec=i) = sum_j P[i,j]*U[i,j]
+    # E[u(switch k) | rec=i] * P(rec=i) = sum_j P[i,j]*U[k,j]
+    # So we need sum_j P[i,j]*(U[i,j] - U[k,j]) >= 0
+    
+    # We can add these constraints for all pairs (i, k)
+    # Ideally O(N^2) constraints
+    
+    # Let's perform the loop explicitly for clarity as N is small (<= 50)
+    
+    # P1
+    for i in range(n): # recommended
+        for k in range(n): # deviation
+            if i == k: continue
+            constraints.append(cp.sum(cp.multiply(P[i, :], U[i, :] - U[k, :])) >= 0)
+            
+    # P2
+    for j in range(n): # recommended
+        for l in range(n): # deviation
+            if j == l: continue
+            constraints.append(cp.sum(cp.multiply(P[:, j], U2[:, j] - U2[:, l])) >= 0)
+
+    prob = cp.Problem(objective, constraints)
+    
+    # Try different solvers
+    solvers = []
+    if hasattr(cp, 'CLARABEL'): solvers.append(cp.CLARABEL)
+    solvers.extend([cp.ECOS, cp.SCS])
+
+    for solver in solvers:
+        try:
+            prob.solve(solver=solver)
+            if prob.status in ["optimal", "optimal_inaccurate"]:
+                break
+        except Exception:
+            continue
+            
+    if prob.status not in ["optimal", "optimal_inaccurate"] or P.value is None:
+         # Fallback
+        return np.ones((n,n))/n**2, 0.0
+  
+    P_val = P.value
+    P_val = np.maximum(P_val, 0.0)
+    total = P_val.sum()
+    if total > 1e-12:
+        P_val /= total
+        
+    welfare = np.sum(P_val * W)
+    return P_val, welfare
+
+
+
+
 if __name__ == "__main__":
     import time
-    from games import sample_correlated_symmetric_game
+    from games import sample_competitive_cooperative_interpolation_game
 
     rng = np.random.default_rng(42)
     
     for n_actions in [10, 25, 50]:
-        print(f"\nBenchmarking solvers on Correlated Symmetric (A + 0.5*C) with {n_actions} actions...")
+        print(f"\nBenchmarking solvers on sample_competitive_cooperative_interpolation_game with {n_actions} actions... ")
         
         # Generate game: A + 0.5*C
-        game = sample_correlated_symmetric_game(n_actions=n_actions, alpha=0.5, rng=rng)
+        game = sample_competitive_cooperative_interpolation_game(n_actions=n_actions, alpha=0.5, rng=rng)
         U = game.payoffs_p1
 
         solvers_to_test = [
@@ -229,6 +314,7 @@ if __name__ == "__main__":
             ("CCE (Welfare)", lambda: solve_cce_joint(U, "welfare", rng=rng)),
             ("CCE (Gini)", lambda: solve_cce_joint(U, "gini", rng=rng)),
             ("Max Welfare CCE", lambda: solve_max_welfare_cce(U)),
+            ("Max Welfare CE", lambda: solve_max_welfare_ce(U)),
         ]
 
         for name, solver_fn in solvers_to_test:
