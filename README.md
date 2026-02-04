@@ -3,6 +3,29 @@
 
 This repository implements Policy Space Response Oracles (PSRO) and related equilibrium solvers for game theoretic analysis, focusing on Coarse Correlated Equilibria (CCE) and Correlated Equilibria (CE) in general-sum games.
 
+## Experimental Results
+
+### Competitive vs Collaborative Environments
+Sweep of JPSRO methods between competitive (alpha=0) and collaborative (alpha=1) environments.
+- **Result:** `random_vertex_cce` dominates as a meta-strategy.
+- **Run:** `python run_alpha_sweep_absolute.py`
+
+<img src="static/alpha_sweep_welfare.png" alt="Alpha Sweep Welfare" width="33%">
+
+### Rank Sweep (Strategic Complexity)
+Sweep of JPSRO methods with games of varying rank (strategic complexity).
+- **Result:** `max_gini` underperforms in this setup.
+- **Run:** `python run_rank_sweep_absolute.py`
+
+<img src="static/rank_sweep_welfare.png" alt="Rank Sweep Welfare" width="33%">
+
+### Stochastic Payoffs
+Comparison of JPSRO on a NF game with added Gaussian noise (std dev: 0, 0.01, 0.1).
+- **Result:** Noise can boost exploration, similar to stochastic gradients.
+- **Run:** `python run_stochastic_experiment.py`
+
+<img src="static/stochastic_noise_welfare.png" alt="Stochastic Noise Welfare" width="100%">
+
 ## Files Description
 
 ### Core Logic
@@ -17,9 +40,8 @@ This repository implements Policy Space Response Oracles (PSRO) and related equi
   - Candogan-style Potential/Harmonic games.
   - Symmetric and Zero-sum mixtures.
 - **`metrics.py`**: Utilities for calculating equilibrium metrics:
-  - `calculate_ne_regret`: Nash Exact Regret.
   - `calculate_cce_regret`: CCE Regret.
-  - `calculate_regret_cce` / `calculate_regret_ce`: Regret checks for solver verification.
+  - `calculate_ce_regret`: CE Regret.
 - **`oracles.py`**: Best Response logic for PSRO:
   - `compute_best_responses`: Standard BR against mixed strategies.
   - `compute_rectified_best_responses`: Rectified BR for JPSRO/CCE expansion.
